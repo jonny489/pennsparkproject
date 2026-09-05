@@ -36,8 +36,9 @@ create table if not exists users (
 create table if not exists items (
   id uuid primary key default gen_random_uuid(),
 
-  -- Cascade so deleting an account removes its collection.
-  user_id uuid not null references users (id) on delete cascade,
+  -- Cascade so deleting an account removes its collection. Schema-qualified so
+  -- the target cannot depend on search_path.
+  user_id uuid not null references public.users (id) on delete cascade,
 
   -- Reject whitespace-only input in the database, not just the API.
   title text not null check (length(trim(title)) > 0),
@@ -54,6 +55,28 @@ create table if not exists items (
   constraint rating_requires_completed
     check (rating is null or status = 'completed')
 );
+
+-- An items table created before the move off Supabase Auth still points its
+-- foreign key at auth.users, and the `create table if not exists` above is a
+-- no-op that cannot repair it. Repoint it at public.users instead.
+--
+-- This deliberately does not delete rows. If any item still carries a
+-- Supabase Auth user_id, the constraint fails loudly rather than discarding
+-- data behind your back; reassign or delete those rows, then re-run.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.items'::regclass
+      and conname = 'items_user_id_fkey'
+      and confrelid <> 'public.users'::regclass
+  ) then
+    alter table items drop constraint items_user_id_fkey;
+    alter table items add constraint items_user_id_fkey
+      foreign key (user_id) references public.users (id) on delete cascade;
+  end if;
+end
+$$;
 
 -- The collection list is always "this user's items, newest first".
 create index if not exists items_user_id_created_at_idx
