@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db import close_pool, open_pool
-from app.routers import items
+from app.routers import auth, items
 
 
 @asynccontextmanager
@@ -35,6 +35,7 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
     app.include_router(items.router)
+    app.include_router(auth.router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:
