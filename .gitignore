@@ -22,3 +22,8 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Agent context and planning notes. Kept locally, never committed.
+AGENTS.md
+CLAUDE.md
+docs/superpowers/
