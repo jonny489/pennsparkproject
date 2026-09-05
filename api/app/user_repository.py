@@ -10,6 +10,10 @@ from app.models import UserRecord
 _COLUMNS = "id, email, password_hash, google_sub, created_at"
 
 
+class EmailAlreadyRegistered(Exception):
+    """Raised when a concurrent request won the race to insert this email."""
+
+
 class UserRepository(Protocol):
     async def get_by_id(self, user_id: UUID) -> UserRecord | None: ...
 
@@ -23,7 +27,23 @@ class UserRepository(Protocol):
         *,
         password_hash: str | None = None,
         google_sub: str | None = None,
-    ) -> UserRecord: ...
+    ) -> UserRecord:
+        # The caller's existence check and this insert are separate statements,
+        # so a concurrent signup can still lose the unique constraint.
+        try:
+            row = await self._pool.fetchrow(
+                f"""
+                insert into users (email, password_hash, google_sub)
+                values ($1, $2, $3)
+                returning {_COLUMNS}
+                """,
+                email,
+                password_hash,
+                google_sub,
+            )
+        except asyncpg.UniqueViolationError as exc:
+            raise EmailAlreadyRegistered(email) from exc
+        return UserRecord.model_validate(dict(row))
 
     async def link_google(self, user_id: UUID, google_sub: str) -> UserRecord: ...
 
@@ -57,16 +77,21 @@ class PostgresUserRepository:
         password_hash: str | None = None,
         google_sub: str | None = None,
     ) -> UserRecord:
-        row = await self._pool.fetchrow(
+        # The existence check in the route and this insert are two statements,
+        # so a concurrent signup can still lose the unique constraint.
+        try:
+            row = await self._pool.fetchrow(
             f"""
             insert into users (email, password_hash, google_sub)
-            values ($1, $2, $3)
-            returning {_COLUMNS}
-            """,
-            email,
-            password_hash,
-            google_sub,
-        )
+                values ($1, $2, $3)
+                returning {_COLUMNS}
+                """,
+                email,
+                password_hash,
+                google_sub,
+            )
+        except asyncpg.UniqueViolationError as exc:
+            raise EmailAlreadyRegistered(email) from exc
         return UserRecord.model_validate(dict(row))
 
     async def link_google(self, user_id: UUID, google_sub: str) -> UserRecord:

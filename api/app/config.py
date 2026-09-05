@@ -31,3 +31,22 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def require_runtime_settings(settings: Settings) -> None:
+    """Fail startup on missing configuration.
+
+    JWT_SECRET especially: PyJWT will happily sign with an empty key, so without
+    this the app would register users and issue tokens that no request can then
+    verify.
+    """
+    missing = [
+        name.upper()
+        for name in ("database_url", "jwt_secret")
+        if not getattr(settings, name)
+    ]
+    if missing:
+        raise RuntimeError(
+            f"Missing required settings: {', '.join(missing)}. "
+            "Copy api/.env.example to api/.env, or set them in the host's environment."
+        )

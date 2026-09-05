@@ -11,8 +11,11 @@ from pydantic import (
     EmailStr,
     Field,
     StringConstraints,
+    field_validator,
     model_validator,
 )
+
+from app.security import MAX_PASSWORD_BYTES
 
 # Trimmed and non-blank, mirroring the CHECK constraints in schema.sql.
 NonBlankStr = Annotated[
@@ -82,8 +85,17 @@ class ItemRead(BaseModel):
 
 class UserCreate(BaseModel):
     email: EmailStr
-    # 72 bytes is bcrypt's ceiling; 8 is a reasonable floor.
-    password: Annotated[str, Field(min_length=8, max_length=72)]
+    password: Annotated[str, Field(min_length=8)]
+
+    @field_validator("password")
+    @classmethod
+    def _fits_bcrypt(cls, value: str) -> str:
+        # bcrypt's ceiling is 72 BYTES, while Field(max_length) counts
+        # characters. Accented or non-Latin passwords would otherwise pass
+        # validation and then fail during hashing.
+        if len(value.encode("utf-8")) > MAX_PASSWORD_BYTES:
+            raise ValueError(f"password must be at most {MAX_PASSWORD_BYTES} bytes")
+        return value
 
 
 class UserLogin(BaseModel):

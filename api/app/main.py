@@ -6,13 +6,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
+from app.config import get_settings, require_runtime_settings
 from app.db import close_pool, open_pool
 from app.routers import auth, items
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    require_runtime_settings(get_settings())
     await open_pool()
     try:
         yield

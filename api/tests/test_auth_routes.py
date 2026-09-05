@@ -98,3 +98,23 @@ async def test_me_returns_the_signed_in_user(
 
 async def test_me_requires_a_token(unauthenticated_client: AsyncClient) -> None:
     assert (await unauthenticated_client.get("/auth/me")).status_code == 401
+
+
+async def test_a_multibyte_password_over_the_byte_limit_is_refused_cleanly(
+    unauthenticated_client: AsyncClient,
+) -> None:
+    """72 accented characters is 144 UTF-8 bytes. bcrypt's ceiling is bytes, so
+    this must be a 422 rather than a 500 during hashing."""
+    response = await unauthenticated_client.post(
+        "/auth/register", json={**CREDENTIALS, "password": "é" * 72}
+    )
+    assert response.status_code == 422
+
+
+async def test_a_long_ascii_password_within_the_limit_is_accepted(
+    unauthenticated_client: AsyncClient,
+) -> None:
+    response = await unauthenticated_client.post(
+        "/auth/register", json={**CREDENTIALS, "password": "a" * 72}
+    )
+    assert response.status_code == 201

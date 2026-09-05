@@ -14,7 +14,7 @@ from app.db import get_user_repository
 from app.models import TokenResponse, UserCreate, UserLogin, UserRead, UserRecord
 from app.security import hash_password, verify_password
 from app.tokens import create_access_token, sign_state, verify_state
-from app.user_repository import UserRepository
+from app.user_repository import EmailAlreadyRegistered, UserRepository
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -46,9 +46,16 @@ async def register(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with that email already exists",
         )
-    user = await users.create_user(
-        data.email, password_hash=hash_password(data.password)
-    )
+    try:
+        user = await users.create_user(
+            data.email, password_hash=hash_password(data.password)
+        )
+    except EmailAlreadyRegistered:
+        # Another request registered this email between the check and the insert.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with that email already exists",
+        ) from None
     return _token_response(user, settings)
 
 
@@ -115,37 +122,57 @@ async def google_start(settings: Settings = Depends(get_settings)) -> RedirectRe
     return RedirectResponse(f"{GOOGLE_AUTH_URL}?{urlencode(params)}")
 
 
+def _oauth_failure(settings: Settings, reason: str) -> RedirectResponse:
+    """Send the browser back to the app instead of rendering raw API JSON."""
+    return RedirectResponse(f"{settings.frontend_url}/auth/callback#error={reason}")
+
+
 @router.get("/google/callback")
 async def google_callback(
-    code: str,
     state: str,
+    code: str | None = None,
+    error: str | None = None,
     users: UserRepository = Depends(get_user_repository),
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
+    # Google sends ?error=access_denied with no code when the user cancels.
+    if error or not code:
+        return _oauth_failure(settings, "cancelled")
+
     try:
         verify_state(state, settings)
     except jwt.InvalidTokenError as exc:
+        # Not a normal user path — a bad state means CSRF or a mangled link, so
+        # fail loudly rather than bouncing the browser onward.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OAuth state"
         ) from exc
 
-    identity = await exchange_code(code, settings)
-    google_sub, email = identity["sub"], identity["email"]
+    try:
+        identity = await exchange_code(code, settings)
+        google_sub, email = identity["sub"], identity["email"]
+    except (httpx.HTTPError, KeyError, ValueError):
+        # An expired or reused code, a Google outage, or a response missing the
+        # claims we need.
+        return _oauth_failure(settings, "exchange_failed")
 
     user = await users.get_by_google_sub(google_sub)
     if user is None:
         existing = await users.get_by_email(email)
         if existing is None:
-            user = await users.create_user(email, google_sub=google_sub)
+            try:
+                user = await users.create_user(email, google_sub=google_sub)
+            except EmailAlreadyRegistered:
+                # Lost a concurrent signup race; the account exists now.
+                user = await users.get_by_email(email)
+                if user is None:
+                    return _oauth_failure(settings, "exchange_failed")
         elif identity.get("email_verified"):
             user = await users.link_google(existing.id, google_sub)
         else:
             # Linking on an unverified address would let someone claim an
             # account they do not own.
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="That email is already registered. Sign in with your password.",
-            )
+            return _oauth_failure(settings, "email_taken")
 
     token = create_access_token(user.id, user.email, settings)
     # The fragment is never sent to a server, keeping the token out of access

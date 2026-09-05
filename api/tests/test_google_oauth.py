@@ -1,5 +1,6 @@
 """The Google OAuth round trip, with the token exchange stubbed out."""
 
+import httpx
 import jwt
 import pytest
 from httpx import AsyncClient
@@ -86,7 +87,9 @@ async def test_an_unverified_google_email_does_not_link(
     google_identity["identity"] = {**VERIFIED, "email_verified": False}
 
     response = await _callback(unauthenticated_client)
-    assert response.status_code == 400
+    # Redirected back to the app with a reason, not raw API JSON in the browser.
+    assert response.status_code == 307
+    assert "#error=email_taken" in response.headers["location"]
     assert len(users.all_users()) == 1
 
 
@@ -98,3 +101,41 @@ async def test_a_forged_state_is_rejected(unauthenticated_client: AsyncClient) -
         follow_redirects=False,
     )
     assert response.status_code == 400
+
+
+async def test_cancelling_at_google_redirects_back_with_a_reason(
+    unauthenticated_client: AsyncClient,
+) -> None:
+    """Google sends error=access_denied and no code when the user cancels."""
+    response = await unauthenticated_client.get(
+        "/auth/google/callback",
+        params={"error": "access_denied", "state": sign_state(SETTINGS)},
+        follow_redirects=False,
+    )
+    assert response.status_code == 307
+    assert "#error=cancelled" in response.headers["location"]
+
+
+async def test_a_failed_token_exchange_redirects_back_with_a_reason(
+    unauthenticated_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An expired or reused code, or a Google outage."""
+
+    async def boom(code: str, settings: Settings) -> dict:
+        raise httpx.HTTPError("google is unreachable")
+
+    monkeypatch.setattr(auth_router, "exchange_code", boom)
+
+    response = await _callback(unauthenticated_client)
+    assert response.status_code == 307
+    assert "#error=exchange_failed" in response.headers["location"]
+
+
+async def test_an_id_token_missing_claims_does_not_500(
+    unauthenticated_client: AsyncClient, google_identity: dict
+) -> None:
+    google_identity["identity"] = {"sub": "google-abc"}  # no email
+
+    response = await _callback(unauthenticated_client)
+    assert response.status_code == 307
+    assert "#error=exchange_failed" in response.headers["location"]
