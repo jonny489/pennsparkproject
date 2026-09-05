@@ -3,32 +3,30 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { useSession } from "@/components/session-provider";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getSupabase } from "@/lib/supabase";
+import { googleSignInUrl, login, register } from "@/lib/auth";
 
-/** Magic-link sign-in: no password to store, reset, or leak. */
 export function SignIn() {
+  const { refresh } = useSession();
+  const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState("");
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSending(true);
-
-    const { error } = await getSupabase().auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin },
-    });
-
-    setSending(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+    setBusy(true);
+    try {
+      await (isRegistering ? register(email, password) : login(email, password));
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not sign you in.");
+    } finally {
+      setBusy(false);
     }
-    setSent(true);
   }
 
   return (
@@ -38,29 +36,63 @@ export function SignIn() {
         Your books, movies, and games in one place.
       </p>
 
-      {sent ? (
-        <p className="mt-8 rounded-md border bg-muted/40 p-4 text-sm">
-          Check <span className="font-medium">{email}</span> for a sign-in link.
-        </p>
-      ) : (
-        <form onSubmit={handleSubmit} className="mt-8 space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={sending}>
-            {sending ? "Sending…" : "Send sign-in link"}
-          </Button>
-        </form>
-      )}
+      <form onSubmit={handleSubmit} className="mt-8 space-y-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            required
+            minLength={isRegistering ? 8 : undefined}
+            autoComplete={isRegistering ? "new-password" : "current-password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          {isRegistering && (
+            <p className="text-xs text-muted-foreground">At least 8 characters.</p>
+          )}
+        </div>
+
+        <Button type="submit" className="w-full" disabled={busy}>
+          {busy ? "Working…" : isRegistering ? "Create account" : "Sign in"}
+        </Button>
+      </form>
+
+      <div className="my-4 flex items-center gap-3">
+        <span className="h-px flex-1 bg-border" />
+        <span className="text-xs text-muted-foreground">or</span>
+        <span className="h-px flex-1 bg-border" />
+      </div>
+
+      {/* A real link, not a fetch: OAuth is a full-page navigation. */}
+      <a
+        href={googleSignInUrl()}
+        className={buttonVariants({ variant: "outline", className: "w-full" })}
+      >
+        Continue with Google
+      </a>
+
+      <button
+        type="button"
+        className="mt-6 text-sm text-muted-foreground underline underline-offset-4"
+        onClick={() => setIsRegistering((v) => !v)}
+      >
+        {isRegistering
+          ? "Already have an account? Sign in"
+          : "New here? Create an account"}
+      </button>
     </main>
   );
 }

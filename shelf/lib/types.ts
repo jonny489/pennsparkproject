@@ -67,3 +67,9 @@ export const RATING_OPTIONS: Option[] = [1, 2, 3, 4, 5].map((score) => ({
 
 export const mediaTypeLabel = (type: MediaType): string => MEDIA_TYPE_LABELS[type];
 export const statusLabel = (status: Status): string => STATUS_LABELS[status];
+
+export interface User {
+  id: string;
+  email: string;
+  created_at: string;
+}

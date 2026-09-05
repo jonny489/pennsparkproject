@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase";
+import { apiBaseUrl, getToken } from "@/lib/auth";
 import type { Item, ItemFilters, ItemInput } from "@/lib/types";
 
 /** Error carrying the HTTP status, so callers can tell 401 from 422. */
@@ -10,17 +10,6 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
-}
-
-// Read at call time, not module load, so the app builds without env vars.
-function apiBaseUrl(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL;
-  if (!base) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_API_URL. Copy shelf/.env.example to shelf/.env.local.",
-    );
-  }
-  return base;
 }
 
 /** FastAPI sends `detail` as a string for an HTTPException but as an array of
@@ -42,8 +31,7 @@ function extractDetail(body: unknown, fallback: string): string {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // The API reads the user id out of this token, so every request carries it.
-  const { data } = await getSupabase().auth.getSession();
-  const token = data.session?.access_token;
+  const token = getToken();
   if (!token) throw new ApiError("You are signed out. Sign in again to continue.", 401);
 
   const response = await fetch(`${apiBaseUrl()}${path}`, {

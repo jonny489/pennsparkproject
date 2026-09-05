@@ -19,7 +19,7 @@ const message = (error: unknown, fallback: string) =>
   error instanceof ApiError ? error.message : fallback;
 
 export function Collection() {
-  const { session, signOut } = useSession();
+  const { user, signOut } = useSession();
 
   const [items, setItems] = useState<Item[]>([]);
   const [filters, setFilters] = useState<ItemFilters>({});
@@ -91,11 +91,11 @@ export function Collection() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Shelf</h1>
-          <p className="text-sm text-muted-foreground">{session?.user.email}</p>
+          <p className="text-sm text-muted-foreground">{user?.email}</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => openDialog(null)}>Add item</Button>
-          <Button variant="ghost" onClick={() => void signOut()}>
+          <Button variant="ghost" onClick={signOut}>
             Sign out
           </Button>
         </div>

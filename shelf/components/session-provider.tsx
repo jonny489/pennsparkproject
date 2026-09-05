@@ -1,55 +1,66 @@
 "use client";
 
-import type { Session } from "@supabase/supabase-js";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-import { getSupabase } from "@/lib/supabase";
+import { clearToken, fetchMe } from "@/lib/auth";
+import type { User } from "@/lib/types";
 
 interface SessionState {
-  session: Session | null;
-  /** True until the first lookup resolves, so the sign-in screen does not
-   *  flash at an already-signed-in user. */
+  user: User | null;
+  /** True until the first /auth/me call resolves, so the sign-in screen does
+   *  not flash at an already-signed-in user. */
   loading: boolean;
-  signOut: () => Promise<void>;
+  refresh: () => Promise<void>;
+  signOut: () => void;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const applyUser = useCallback((next: User | null) => {
+    setUser(next);
+    setLoading(false);
+  }, []);
+
+  /** Re-read the session after a sign-in. Called from event handlers, never
+   *  from an effect. */
+  const refresh = useCallback(async () => {
+    applyUser(await fetchMe());
+  }, [applyUser]);
 
   useEffect(() => {
     let active = true;
-
-    getSupabase()
-      .auth.getSession()
-      .then(({ data }) => {
-        if (!active) return;
-        setSession(data.session);
-        setLoading(false);
-      });
-
-    // Follow sign-in, sign-out and token refresh for the page's lifetime.
-    const { data: listener } = getSupabase().auth.onAuthStateChange((_event, next) =>
-      setSession(next),
-    );
-
+    // setState lives in the callback rather than the effect body, and the guard
+    // stops an update landing after the provider unmounts.
+    void fetchMe().then((next) => {
+      if (active) applyUser(next);
+    });
     return () => {
       active = false;
-      listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [applyUser]);
 
   const value = useMemo<SessionState>(
     () => ({
-      session,
+      user,
       loading,
-      signOut: async () => {
-        await getSupabase().auth.signOut();
+      refresh,
+      signOut: () => {
+        clearToken();
+        setUser(null);
       },
     }),
-    [session, loading],
+    [user, loading, refresh],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
