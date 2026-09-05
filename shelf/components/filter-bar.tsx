@@ -1,18 +1,10 @@
 "use client";
 
+import { SelectField } from "@/components/select-field";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  MEDIA_TYPES,
-  MEDIA_TYPE_LABELS,
-  STATUSES,
-  STATUS_LABELS,
+  MEDIA_TYPE_OPTIONS,
+  STATUS_OPTIONS,
   type ItemFilters,
   type MediaType,
   type Status,
@@ -37,46 +29,26 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
         onChange={(e) => onChange({ ...filters, search: e.target.value || undefined })}
       />
 
-      <Select
+      <SelectField
+        className="sm:w-40"
         value={filters.media_type ?? ALL}
-        onValueChange={(value) =>
+        options={[{ value: ALL, label: "All types" }, ...MEDIA_TYPE_OPTIONS]}
+        onChange={(value) =>
           onChange({
             ...filters,
             media_type: value === ALL ? undefined : (value as MediaType),
           })
         }
-      >
-        <SelectTrigger className="sm:w-40">
-          <SelectValue placeholder="All types" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>All types</SelectItem>
-          {MEDIA_TYPES.map((type) => (
-            <SelectItem key={type} value={type}>
-              {MEDIA_TYPE_LABELS[type]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      />
 
-      <Select
+      <SelectField
+        className="sm:w-40"
         value={filters.status ?? ALL}
-        onValueChange={(value) =>
+        options={[{ value: ALL, label: "All statuses" }, ...STATUS_OPTIONS]}
+        onChange={(value) =>
           onChange({ ...filters, status: value === ALL ? undefined : (value as Status) })
         }
-      >
-        <SelectTrigger className="sm:w-40">
-          <SelectValue placeholder="All statuses" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>All statuses</SelectItem>
-          {STATUSES.map((status) => (
-            <SelectItem key={status} value={status}>
-              {STATUS_LABELS[status]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      />
     </div>
   );
 }

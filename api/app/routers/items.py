@@ -18,8 +18,7 @@ from app.repository import ItemRepository
 
 router = APIRouter(prefix="/items", tags=["items"])
 
-# Absent and not-yours both surface as 404. A 403 would confirm that an id
-# exists, which leaks the shape of other users' collections.
+# Missing and not-yours both return 404: a 403 would confirm the id exists.
 _NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
 
 
@@ -70,13 +69,14 @@ async def update_item(
 
     changes = data.changes()
 
-    # Validate the state the item will END UP in, not the patch body. Checking
-    # the body alone would accept {"status": "planned"} against a completed item
-    # that already carries a rating, leaving an invalid row behind.
-    merged_status = changes.get("status", existing.status)
-    merged_rating = changes.get("rating", existing.rating)
+    # Validate the state the item ends up in, not the patch body. Checking the
+    # body alone would accept {"status": "planned"} against a completed item
+    # that still carries a rating.
     try:
-        validate_rating_rule(Status(merged_status), merged_rating)
+        validate_rating_rule(
+            Status(changes.get("status", existing.status)),
+            changes.get("rating", existing.rating),
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -84,8 +84,7 @@ async def update_item(
 
     updated = await repo.update_item(user_id, item_id, changes)
     if updated is None:
-        # Deleted between the read and the write.
-        raise _NOT_FOUND
+        raise _NOT_FOUND  # deleted between the read and the write
     return updated
 
 

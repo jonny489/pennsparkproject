@@ -1,8 +1,6 @@
-/** Types mirroring the FastAPI schema. Kept in one place so the UI and the
- *  API client cannot drift apart. */
+/** Types mirroring the FastAPI schema, so the UI and API client cannot drift. */
 
-// `as const` arrays give both a runtime list (to render dropdowns from) and a
-// literal union type, without writing either one twice.
+// `as const` gives both a runtime list to render from and a literal union type.
 export const MEDIA_TYPES = ["book", "movie", "game"] as const;
 export type MediaType = (typeof MEDIA_TYPES)[number];
 
@@ -35,14 +33,37 @@ export interface ItemFilters {
   status?: Status;
 }
 
-export const STATUS_LABELS: Record<Status, string> = {
+const MEDIA_TYPE_LABELS: Record<MediaType, string> = {
+  book: "Book",
+  movie: "Movie",
+  game: "Game",
+};
+
+const STATUS_LABELS: Record<Status, string> = {
   planned: "Planned",
   in_progress: "In progress",
   completed: "Completed",
 };
 
-export const MEDIA_TYPE_LABELS: Record<MediaType, string> = {
-  book: "Book",
-  movie: "Movie",
-  game: "Game",
-};
+export interface Option {
+  value: string;
+  label: string;
+}
+
+export const MEDIA_TYPE_OPTIONS: Option[] = MEDIA_TYPES.map((value) => ({
+  value,
+  label: MEDIA_TYPE_LABELS[value],
+}));
+
+export const STATUS_OPTIONS: Option[] = STATUSES.map((value) => ({
+  value,
+  label: STATUS_LABELS[value],
+}));
+
+export const RATING_OPTIONS: Option[] = [1, 2, 3, 4, 5].map((score) => ({
+  value: String(score),
+  label: "★".repeat(score),
+}));
+
+export const mediaTypeLabel = (type: MediaType): string => MEDIA_TYPE_LABELS[type];
+export const statusLabel = (status: Status): string => STATUS_LABELS[status];

@@ -5,13 +5,11 @@ import asyncpg
 from app.config import get_settings
 from app.repository import ItemRepository, PostgresItemRepository
 
-# Held at module level and created once during app startup. asyncpg pools are
-# safe to share across requests; opening one per request would be very slow.
+# Created once at startup and shared; a pool per request would be very slow.
 _pool: asyncpg.Pool | None = None
 
 
 async def open_pool() -> None:
-    """Create the pool. Fails loudly if DATABASE_URL is missing."""
     global _pool
     settings = get_settings()
     if not settings.database_url:

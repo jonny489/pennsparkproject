@@ -11,9 +11,12 @@ import { Button } from "@/components/ui/button";
 import { ApiError, itemsApi } from "@/lib/api";
 import type { Item, ItemFilters, ItemInput } from "@/lib/types";
 
-/** Wait this long after the last keystroke before querying, so typing a search
- *  term costs one request instead of one per character. */
+/** Wait this long after the last keystroke, so typing a search term costs one
+ *  request rather than one per character. */
 const SEARCH_DEBOUNCE_MS = 300;
+
+const message = (error: unknown, fallback: string) =>
+  error instanceof ApiError ? error.message : fallback;
 
 export function Collection() {
   const { session, signOut } = useSession();
@@ -33,11 +36,9 @@ export function Collection() {
     try {
       setItems(await itemsApi.list(active));
     } catch (error) {
-      // Show the failure instead of rendering an empty shelf, which would
-      // wrongly read as "you have no items".
-      const message =
-        error instanceof ApiError ? error.message : "Could not load your collection.";
-      setLoadError(message);
+      // Show the failure rather than an empty shelf, which would wrongly read
+      // as "you have no items".
+      setLoadError(message(error, "Could not load your collection."));
     } finally {
       setLoading(false);
     }
@@ -48,12 +49,7 @@ export function Collection() {
     return () => clearTimeout(timer);
   }, [filters, load]);
 
-  function openAdd() {
-    setEditing(null);
-    setDialogOpen(true);
-  }
-
-  function openEdit(item: Item) {
+  function openDialog(item: Item | null) {
     setEditing(item);
     setDialogOpen(true);
   }
@@ -71,7 +67,7 @@ export function Collection() {
       setDialogOpen(false);
       await load(filters);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "Could not save this item.");
+      toast.error(message(error, "Could not save this item."));
     } finally {
       setSaving(false);
     }
@@ -84,9 +80,7 @@ export function Collection() {
       toast.success("Item removed");
       await load(filters);
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : "Could not remove this item.",
-      );
+      toast.error(message(error, "Could not remove this item."));
     }
   }
 
@@ -100,7 +94,7 @@ export function Collection() {
           <p className="text-sm text-muted-foreground">{session?.user.email}</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={openAdd}>Add item</Button>
+          <Button onClick={() => openDialog(null)}>Add item</Button>
           <Button variant="ghost" onClick={() => void signOut()}>
             Sign out
           </Button>
@@ -133,7 +127,7 @@ export function Collection() {
               <ItemCard
                 key={item.id}
                 item={item}
-                onEdit={openEdit}
+                onEdit={openDialog}
                 onDelete={(target) => void handleDelete(target)}
               />
             ))}

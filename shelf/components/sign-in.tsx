@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getSupabase } from "@/lib/supabase";
 
-/** Magic-link sign-in. No password to store, reset, or leak. */
+/** Magic-link sign-in: no password to store, reset, or leak. */
 export function SignIn() {
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
@@ -24,8 +24,6 @@ export function SignIn() {
     });
 
     setSending(false);
-
-    // Surface the real reason rather than failing silently.
     if (error) {
       toast.error(error.message);
       return;

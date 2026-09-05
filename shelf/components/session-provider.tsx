@@ -7,8 +7,8 @@ import { getSupabase } from "@/lib/supabase";
 
 interface SessionState {
   session: Session | null;
-  /** True until the initial session lookup resolves, so the UI can avoid
-   *  flashing the sign-in screen at an already-signed-in user. */
+  /** True until the first lookup resolves, so the sign-in screen does not
+   *  flash at an already-signed-in user. */
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -22,17 +22,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
 
-    // Restore any existing session on load.
-    getSupabase().auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setSession(data.session);
-      setLoading(false);
-    });
+    getSupabase()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (!active) return;
+        setSession(data.session);
+        setLoading(false);
+      });
 
-    // Then follow sign-in, sign-out, and token refresh for the page's lifetime.
-    const { data: listener } = getSupabase().auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-    });
+    // Follow sign-in, sign-out and token refresh for the page's lifetime.
+    const { data: listener } = getSupabase().auth.onAuthStateChange((_event, next) =>
+      setSession(next),
+    );
 
     return () => {
       active = false;

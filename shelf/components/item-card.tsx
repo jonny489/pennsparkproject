@@ -3,11 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  MEDIA_TYPE_LABELS,
-  STATUS_LABELS,
-  type Item,
-} from "@/lib/types";
+import { mediaTypeLabel, statusLabel, type Item } from "@/lib/types";
 
 interface ItemCardProps {
   item: Item;
@@ -25,11 +21,10 @@ export function ItemCard({ item, onEdit, onDelete }: ItemCardProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="secondary">{MEDIA_TYPE_LABELS[item.media_type]}</Badge>
+          <Badge variant="secondary">{mediaTypeLabel(item.media_type)}</Badge>
           <Badge variant={item.status === "completed" ? "default" : "outline"}>
-            {STATUS_LABELS[item.status]}
+            {statusLabel(item.status)}
           </Badge>
-          {/* Ratings only exist on completed items, so this is absent elsewhere. */}
           {item.rating !== null && (
             <span
               className="text-sm text-amber-500"

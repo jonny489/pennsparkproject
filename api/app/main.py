@@ -13,7 +13,6 @@ from app.routers import items
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Open the pool once at startup and close it on shutdown."""
     await open_pool()
     try:
         yield
@@ -22,12 +21,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    """Factory so tests can build an app without triggering the DB lifespan."""
+    """Factory, so tests can build an app without running the DB lifespan."""
     settings = get_settings()
     app = FastAPI(title="Shelf API", version="0.1.0", lifespan=lifespan)
 
-    # The frontend is deployed on a different origin from this API, so the
-    # browser needs explicit permission to call it.
+    # The frontend is served from a different origin, so the browser needs
+    # explicit permission to call this API.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -35,12 +34,11 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
-
     app.include_router(items.router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:
-        """Unauthenticated so the host's health check can reach it."""
+        """Unauthenticated, so the host's health check can reach it."""
         return {"status": "ok"}
 
     return app

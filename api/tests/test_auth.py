@@ -46,15 +46,14 @@ def make_token(key: ec.EllipticCurvePrivateKey, **overrides: object) -> str:
 
 def call(token: str, settings: Settings) -> UUID:
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
-    # Request is only read for the dev-header escape hatch, which is off here.
-    return auth.get_current_user_id(None, credentials, settings)  # type: ignore[arg-type]
+    return auth.get_current_user_id(credentials, settings)
 
 
 @pytest.fixture(autouse=True)
 def resolve_key(monkeypatch: pytest.MonkeyPatch, keypair):
     """Stand in for the network fetch of the project's JWKS."""
     monkeypatch.setattr(
-        auth, "_resolve_signing_key", lambda token, settings: keypair.public_key()
+        auth, "_signing_key", lambda token, settings: keypair.public_key()
     )
 
 

@@ -1,18 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import type { Item, ItemFilters, ItemInput } from "@/lib/types";
 
-/** Read at call time, not module load, so the app can build without env vars. */
-function apiBaseUrl(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL;
-  if (!base) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_API_URL. Copy shelf/.env.example to shelf/.env.local.",
-    );
-  }
-  return base;
-}
-
-/** Error carrying the HTTP status so callers can distinguish 401 from 422. */
+/** Error carrying the HTTP status, so callers can tell 401 from 422. */
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -23,33 +12,36 @@ export class ApiError extends Error {
   }
 }
 
-/** Pull a readable message out of a FastAPI error body.
- *
- *  FastAPI returns `detail` as a string for HTTPException but as an array of
+// Read at call time, not module load, so the app builds without env vars.
+function apiBaseUrl(): string {
+  const base = process.env.NEXT_PUBLIC_API_URL;
+  if (!base) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_API_URL. Copy shelf/.env.example to shelf/.env.local.",
+    );
+  }
+  return base;
+}
+
+/** FastAPI sends `detail` as a string for an HTTPException but as an array of
  *  validation objects for a 422, so both shapes have to be handled. */
 function extractDetail(body: unknown, fallback: string): string {
   if (typeof body !== "object" || body === null || !("detail" in body)) return fallback;
 
   const { detail } = body as { detail: unknown };
   if (typeof detail === "string") return detail;
+  if (!Array.isArray(detail)) return fallback;
 
-  if (Array.isArray(detail)) {
-    const messages = detail
-      .map((entry) =>
-        typeof entry === "object" && entry !== null && "msg" in entry
-          ? String((entry as { msg: unknown }).msg)
-          : null,
-      )
-      .filter((msg): msg is string => msg !== null);
-    if (messages.length > 0) return messages.join("; ");
-  }
-
-  return fallback;
+  const messages = detail.flatMap((entry) =>
+    typeof entry === "object" && entry !== null && "msg" in entry
+      ? [String((entry as { msg: unknown }).msg)]
+      : [],
+  );
+  return messages.length > 0 ? messages.join("; ") : fallback;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  // The API verifies this token's signature and reads the user id from it, so
-  // every request must carry it.
+  // The API reads the user id out of this token, so every request carries it.
   const { data } = await getSupabase().auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new ApiError("You are signed out. Sign in again to continue.", 401);
@@ -80,17 +72,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       response.status,
     );
   }
-
   return parsed as T;
 }
 
-function buildQuery(filters: ItemFilters): string {
+function buildQuery({ search, media_type, status }: ItemFilters): string {
+  // Only send filters that are set, so the API applies no empty WHERE clauses.
   const params = new URLSearchParams();
-  // Only send filters that are actually set, so the API applies no-op WHERE
-  // clauses for empty values.
-  if (filters.search) params.set("search", filters.search);
-  if (filters.media_type) params.set("media_type", filters.media_type);
-  if (filters.status) params.set("status", filters.status);
+  if (search) params.set("search", search);
+  if (media_type) params.set("media_type", media_type);
+  if (status) params.set("status", status);
   const query = params.toString();
   return query ? `?${query}` : "";
 }

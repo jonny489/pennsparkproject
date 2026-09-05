@@ -1,19 +1,16 @@
-"""Pydantic models and the validation rules shared by every writer."""
+"""Request and response models, and the one business rule they share."""
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-# Trim on the way in and reject whitespace-only values, so " " never becomes a
-# title. Mirrors the CHECK constraints in schema.sql.
+# Trimmed and non-blank, mirroring the CHECK constraints in schema.sql.
 NonBlankStr = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
 ]
-
 Rating = Annotated[int, Field(ge=1, le=5)]
 
 
@@ -30,11 +27,7 @@ class Status(str, Enum):
 
 
 def validate_rating_rule(status: Status, rating: int | None) -> None:
-    """A rating only means something once an item is finished.
-
-    Raised as ValueError so Pydantic surfaces it as a 422 rather than a 500.
-    Lives in one place because both creates and merged patches must enforce it.
-    """
+    """A rating only means something once an item is finished."""
     if rating is not None and status is not Status.COMPLETED:
         raise ValueError("rating can only be set when status is 'completed'")
 
@@ -53,13 +46,7 @@ class ItemCreate(BaseModel):
 
 
 class ItemUpdate(BaseModel):
-    """Partial update. Every field is optional.
-
-    This model deliberately does NOT validate the rating rule on its own: a body
-    like {"status": "planned"} is valid in isolation but may still produce an
-    invalid row once merged onto the stored item. The route merges first, then
-    validates the result via `merged_item`.
-    """
+    """Partial update. The rating rule is checked on the merged result, in the route."""
 
     title: NonBlankStr | None = None
     creator: NonBlankStr | None = None
@@ -67,17 +54,13 @@ class ItemUpdate(BaseModel):
     status: Status | None = None
     rating: Rating | None = None
 
-    def changes(self) -> dict[str, object]:
-        """Only the fields the caller actually sent.
-
-        exclude_unset is what separates "field absent" from "explicitly null" —
-        without it, every omitted field would read as an instruction to clear.
-        """
-        return self.model_dump(exclude_unset=True)
+    def changes(self) -> dict[str, Any]:
+        # exclude_unset separates "field absent" from "explicitly null";
+        # mode="json" renders enums as the plain strings the database wants.
+        return self.model_dump(exclude_unset=True, mode="json")
 
 
 class ItemRead(BaseModel):
-    # from_attributes lets this be built straight from an asyncpg Record.
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
