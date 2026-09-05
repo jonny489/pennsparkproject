@@ -10,18 +10,18 @@ class Settings(BaseSettings):
 
     # Empty defaults so the app imports without credentials; startup checks them.
     database_url: str = ""
-    supabase_url: str = ""
+
+    # Signs our access tokens. Generate with: openssl rand -hex 32
+    jwt_secret: str = ""
+
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://127.0.0.1:8000/auth/google/callback"
+
+    # Where the browser is sent after a successful Google sign-in.
+    frontend_url: str = "http://localhost:3000"
+
     cors_origins: str = "http://localhost:3000"
-
-    @property
-    def jwks_url(self) -> str:
-        return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
-
-    @property
-    def issuer(self) -> str:
-        # Derived from config, never from the token, so tokens minted by another
-        # Supabase project are rejected.
-        return f"{self.supabase_url.rstrip('/')}/auth/v1"
 
     @property
     def cors_origin_list(self) -> list[str]:

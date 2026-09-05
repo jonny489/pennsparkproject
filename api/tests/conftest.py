@@ -83,7 +83,7 @@ class CurrentUser:
 def _test_settings(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
     # get_settings is cached, so clear it either side to stop one test's
     # environment leaking into the next.
-    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
+    monkeypatch.setenv("JWT_SECRET", "test-secret-not-a-real-key")
     monkeypatch.setenv("DATABASE_URL", "")
     get_settings.cache_clear()
     yield
