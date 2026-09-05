@@ -19,7 +19,7 @@ Built for the Penn Spark Fall 2026 Red Developer technical assessment.
 - Rate completed entries 1–5 stars — the rating is rejected anywhere else, in the
   API and in the database, not just hidden in the UI
 - Search by title and filter by media type and status
-- Passwordless magic-link sign-in; each account sees only its own collection
+- Email and password accounts plus Google sign-in; each account sees only its own collection
 - Responsive grid layout with loading, empty, and error states
 
 ## Stack
@@ -29,19 +29,20 @@ Built for the Penn Spark Fall 2026 Red Developer technical assessment.
 | Frontend | Next.js 16 (App Router), React 19, TypeScript strict, Tailwind, shadcn/ui |
 | Backend | FastAPI, Pydantic v2, asyncpg |
 | Database | Supabase Postgres |
-| Auth | Supabase Auth (magic link), ES256 JWT verified by the API against the project JWKS |
+| Auth | Email + password (bcrypt) and Google OAuth, with API-issued JWTs |
 
 ## How it fits together
 
 ```
 Browser ──► Next.js ──► FastAPI ──► Supabase Postgres
-   └── Supabase Auth issues a JWT; FastAPI verifies it and reads the user id
+   └── FastAPI hashes passwords, runs the Google OAuth exchange, and signs the JWT
 ```
 
-Supabase signs access tokens with ES256 asymmetric keys, so the API verifies
-signatures against the project's public JWKS endpoint and holds no shared secret
-at all. The expected issuer is derived from the configured `SUPABASE_URL` rather
-than read from the token, so a token minted by another project is rejected.
+The API owns authentication end to end: bcrypt password hashes stored in its own
+`users` table, the Google authorization-code exchange, and HS256 tokens it signs
+with `JWT_SECRET`. The browser holds a bearer token in `localStorage`, which is
+readable by any XSS on the page — an accepted tradeoff here, since the frontend
+and API sit on different origins and a cookie would need `SameSite=None; Secure`.
 
 The API connects to Postgres with a privileged role, which **bypasses row level
 security**. Ownership is therefore enforced in the backend: every query is scoped
@@ -68,7 +69,7 @@ Create a Supabase project, then run `api/schema.sql` in the SQL editor.
 cd api
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # fill in DATABASE_URL and SUPABASE_URL
+cp .env.example .env          # fill in DATABASE_URL, JWT_SECRET and the Google client
 uvicorn app.main:app --reload
 ```
 
@@ -79,7 +80,7 @@ Interactive docs at http://127.0.0.1:8000/docs.
 ```bash
 cd shelf
 npm install
-cp .env.example .env.local    # fill in the Supabase URL, anon key, and API URL
+cp .env.example .env.local    # set NEXT_PUBLIC_API_URL
 npm run dev
 ```
 
@@ -96,11 +97,16 @@ ownership isolation that keeps one account out of another's collection.
 
 ## API
 
-All routes except `/health` require `Authorization: Bearer <supabase access token>`.
+All `/items` routes require `Authorization: Bearer <token>` from a sign-in call.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | Unauthenticated health check |
+| `POST` | `/auth/register` | Create an account |
+| `POST` | `/auth/login` | Exchange email and password for a token |
+| `GET` | `/auth/me` | The signed-in user |
+| `GET` | `/auth/google` | Start Google sign-in |
+| `GET` | `/auth/google/callback` | Finish Google sign-in |
 | `GET` | `/items` | List, with `search`, `media_type`, `status` filters |
 | `POST` | `/items` | Create |
 | `GET` | `/items/{id}` | Fetch one |
@@ -112,5 +118,9 @@ that the id exists.
 
 ## Notes
 
-Secrets live in `.env` / `.env.local`, both gitignored. Only the Supabase anon key
-reaches the browser; the service-role key is never used by this project.
+Secrets live in `.env` / `.env.local`, both gitignored. Nothing secret reaches the
+browser: the frontend only needs the API's base URL.
+
+Use the Supabase **connection pooler** host in `DATABASE_URL`. The direct
+`db.<ref>.supabase.co` host resolves only to IPv6, which fails from any network
+without IPv6 connectivity.
