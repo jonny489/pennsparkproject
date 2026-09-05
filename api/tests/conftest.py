@@ -15,9 +15,9 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth import get_current_user_id
 from app.config import get_settings
-from app.db import get_repository
+from app.db import get_repository, get_user_repository
 from app.main import create_app
-from app.models import ItemCreate, ItemRead, MediaType, Status
+from app.models import ItemCreate, ItemRead, MediaType, Status, UserRecord
 
 USER_A = UUID("11111111-1111-1111-1111-111111111111")
 USER_B = UUID("22222222-2222-2222-2222-222222222222")
@@ -72,6 +72,49 @@ class FakeItemRepository:
         return self._items.pop((user_id, item_id), None) is not None
 
 
+class FakeUserRepository:
+    """In-memory UserRepository. Email lookup is case-insensitive to match the
+    citext column in schema.sql."""
+
+    def __init__(self) -> None:
+        self._users: dict[UUID, UserRecord] = {}
+
+    async def get_by_id(self, user_id: UUID) -> UserRecord | None:
+        return self._users.get(user_id)
+
+    async def get_by_email(self, email: str) -> UserRecord | None:
+        target = email.lower()
+        return next((u for u in self._users.values() if u.email.lower() == target), None)
+
+    async def get_by_google_sub(self, google_sub: str) -> UserRecord | None:
+        return next((u for u in self._users.values() if u.google_sub == google_sub), None)
+
+    async def create_user(
+        self,
+        email: str,
+        *,
+        password_hash: str | None = None,
+        google_sub: str | None = None,
+    ) -> UserRecord:
+        user = UserRecord(
+            id=uuid4(),
+            email=email,
+            password_hash=password_hash,
+            google_sub=google_sub,
+            created_at=datetime.now(timezone.utc),
+        )
+        self._users[user.id] = user
+        return user
+
+    async def link_google(self, user_id: UUID, google_sub: str) -> UserRecord:
+        updated = self._users[user_id].model_copy(update={"google_sub": google_sub})
+        self._users[user_id] = updated
+        return updated
+
+    def all_users(self) -> list[UserRecord]:
+        return list(self._users.values())
+
+
 class CurrentUser:
     """Mutable holder, so a test can switch identity partway through."""
 
@@ -96,14 +139,22 @@ def repo() -> FakeItemRepository:
 
 
 @pytest.fixture
+def users() -> FakeUserRepository:
+    return FakeUserRepository()
+
+
+@pytest.fixture
 def current_user() -> CurrentUser:
     return CurrentUser(USER_A)
 
 
 @pytest.fixture
-def app(repo: FakeItemRepository, current_user: CurrentUser) -> FastAPI:
+def app(
+    repo: FakeItemRepository, users: FakeUserRepository, current_user: CurrentUser
+) -> FastAPI:
     application = create_app()
     application.dependency_overrides[get_repository] = lambda: repo
+    application.dependency_overrides[get_user_repository] = lambda: users
     application.dependency_overrides[get_current_user_id] = lambda: current_user.id
     return application
 
@@ -120,9 +171,12 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 
 @pytest.fixture
-async def unauthenticated_client(repo: FakeItemRepository) -> AsyncIterator[AsyncClient]:
+async def unauthenticated_client(
+    repo: FakeItemRepository, users: FakeUserRepository
+) -> AsyncIterator[AsyncClient]:
     """App with real auth in place, to prove the endpoints are actually guarded."""
     application = create_app()
     application.dependency_overrides[get_repository] = lambda: repo
+    application.dependency_overrides[get_user_repository] = lambda: users
     async with _client(application) as ac:
         yield ac

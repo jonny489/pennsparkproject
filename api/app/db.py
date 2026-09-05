@@ -4,6 +4,7 @@ import asyncpg
 
 from app.config import get_settings
 from app.repository import ItemRepository, PostgresItemRepository
+from app.user_repository import PostgresUserRepository, UserRepository
 
 # Created once at startup and shared; a pool per request would be very slow.
 _pool: asyncpg.Pool | None = None
@@ -32,3 +33,10 @@ def get_repository() -> ItemRepository:
     if _pool is None:
         raise RuntimeError("Database pool is not initialised; app startup did not run.")
     return PostgresItemRepository(_pool)
+
+
+def get_user_repository() -> UserRepository:
+    """FastAPI dependency. Tests override this with an in-memory fake."""
+    if _pool is None:
+        raise RuntimeError("Database pool is not initialised; app startup did not run.")
+    return PostgresUserRepository(_pool)

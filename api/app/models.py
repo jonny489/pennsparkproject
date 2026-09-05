@@ -5,7 +5,14 @@ from enum import Enum
 from typing import Annotated, Any, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 
 # Trimmed and non-blank, mirroring the CHECK constraints in schema.sql.
 NonBlankStr = Annotated[
@@ -71,3 +78,42 @@ class ItemRead(BaseModel):
     rating: int | None
     created_at: datetime
     updated_at: datetime
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    # 72 bytes is bcrypt's ceiling; 8 is a reasonable floor.
+    password: Annotated[str, Field(min_length=8, max_length=72)]
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserRead(BaseModel):
+    """What the API returns. Deliberately has no password_hash field."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: str
+    created_at: datetime
+
+
+class UserRecord(BaseModel):
+    """Internal row including the hash. Never returned from an endpoint."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: str
+    password_hash: str | None
+    google_sub: str | None
+    created_at: datetime
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserRead
