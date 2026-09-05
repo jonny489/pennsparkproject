@@ -3,14 +3,8 @@
 A personal media library for tracking books, movies, and games — what you plan to
 start, what you're partway through, and what you've finished and rated.
 
-Built for the Penn Spark Fall 2026 Red Developer technical assessment.
-
-> **Before submitting, fill in the two placeholders below:** the live link and the
-> actual time spent. Both are required by the assessment, and neither should be
-> guessed.
-
-- **Live demo:** _TODO — not yet deployed_
-- **Time spent:** _TODO_
+**Live demo:** https://pennsparkproject.vercel.app
+**API docs:** https://pennsparkproject-production.up.railway.app/docs
 
 ## Features
 
